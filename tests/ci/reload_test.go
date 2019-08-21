@@ -84,7 +84,8 @@ func TestReload(t *testing.T) {
 
 	frpcCfgPath, err := config.GenerateConfigFile(consts.FRPC_NORMAL_CONFIG, FRPC_RELOAD_CONF_1)
 	if assert.NoError(err) {
-		defer os.Remove(frpcCfgPath)
+		rmFile1 := frpcCfgPath
+		defer os.Remove(rmFile1)
 	}
 
 	frpsProcess := util.NewProcess(consts.FRPS_BIN_PATH, []string{"-c", frpsCfgPath})
@@ -93,7 +94,7 @@ func TestReload(t *testing.T) {
 		defer frpsProcess.Stop()
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 
 	frpcProcess := util.NewProcess(consts.FRPC_BIN_PATH, []string{"-c", frpcCfgPath})
 	err = frpcProcess.Start()
@@ -101,7 +102,7 @@ func TestReload(t *testing.T) {
 		defer frpcProcess.Stop()
 	}
 
-	time.Sleep(250 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 
 	// test tcp1
 	res, err := util.SendTcpMsg("127.0.0.1:20801", consts.TEST_TCP_ECHO_STR)
@@ -120,7 +121,10 @@ func TestReload(t *testing.T) {
 
 	// reload frpc config
 	frpcCfgPath, err = config.GenerateConfigFile(consts.FRPC_NORMAL_CONFIG, FRPC_RELOAD_CONF_2)
-	assert.NoError(err)
+	if assert.NoError(err) {
+		rmFile2 := frpcCfgPath
+		defer os.Remove(rmFile2)
+	}
 	err = util.ReloadConf("127.0.0.1:21000", "abc", "abc")
 	assert.NoError(err)
 

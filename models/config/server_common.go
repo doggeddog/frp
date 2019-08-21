@@ -24,21 +24,6 @@ import (
 	"github.com/fatedier/frp/utils/util"
 )
 
-var (
-	// server global configure used for generate proxy conf used in frps
-	proxyBindAddr  string
-	subDomainHost  string
-	vhostHttpPort  int
-	vhostHttpsPort int
-)
-
-func InitServerCfg(cfg *ServerCommonConf) {
-	proxyBindAddr = cfg.ProxyBindAddr
-	subDomainHost = cfg.SubDomainHost
-	vhostHttpPort = cfg.VhostHttpPort
-	vhostHttpsPort = cfg.VhostHttpsPort
-}
-
 // common config
 type ServerCommonConf struct {
 	BindAddr      string `json:"bind_addr"`
@@ -51,25 +36,26 @@ type ServerCommonConf struct {
 	VhostHttpPort int `json:"vhost_http_port"`
 
 	// if VhostHttpsPort equals 0, don't listen a public port for https protocol
-	VhostHttpsPort int `json:"vhost_http_port"`
+	VhostHttpsPort int `json:"vhost_https_port"`
 
 	VhostHttpTimeout int64 `json:"vhost_http_timeout"`
 
 	DashboardAddr string `json:"dashboard_addr"`
 
 	// if DashboardPort equals 0, dashboard is not available
-	DashboardPort int    `json:"dashboard_port"`
-	DashboardUser string `json:"dashboard_user"`
-	DashboardPwd  string `json:"dashboard_pwd"`
-	AssetsDir     string `json:"asserts_dir"`
-	LogFile       string `json:"log_file"`
-	LogWay        string `json:"log_way"` // console or file
-	LogLevel      string `json:"log_level"`
-	LogMaxDays    int64  `json:"log_max_days"`
-	Token         string `json:"token"`
-	AuthTimeout   int64  `json:"auth_timeout"`
-	SubDomainHost string `json:"subdomain_host"`
-	TcpMux        bool   `json:"tcp_mux"`
+	DashboardPort   int    `json:"dashboard_port"`
+	DashboardUser   string `json:"dashboard_user"`
+	DashboardPwd    string `json:"dashboard_pwd"`
+	AssetsDir       string `json:"asserts_dir"`
+	LogFile         string `json:"log_file"`
+	LogWay          string `json:"log_way"` // console or file
+	LogLevel        string `json:"log_level"`
+	LogMaxDays      int64  `json:"log_max_days"`
+	DisableLogColor bool   `json:"disable_log_color"`
+	Token           string `json:"token"`
+	SubDomainHost   string `json:"subdomain_host"`
+	TcpMux          bool   `json:"tcp_mux"`
+	Custom404Page   string `json:"custom_404_page"`
 
 	AllowPorts        map[int]struct{}
 	MaxPoolCount      int64 `json:"max_pool_count"`
@@ -78,8 +64,8 @@ type ServerCommonConf struct {
 	UserConnTimeout   int64 `json:"user_conn_timeout"`
 }
 
-func GetDefaultServerConf() *ServerCommonConf {
-	return &ServerCommonConf{
+func GetDefaultServerConf() ServerCommonConf {
+	return ServerCommonConf{
 		BindAddr:          "0.0.0.0",
 		BindPort:          7000,
 		BindUdpPort:       0,
@@ -97,8 +83,8 @@ func GetDefaultServerConf() *ServerCommonConf {
 		LogWay:            "console",
 		LogLevel:          "info",
 		LogMaxDays:        3,
+		DisableLogColor:   false,
 		Token:             "",
-		AuthTimeout:       900,
 		SubDomainHost:     "",
 		TcpMux:            true,
 		AllowPorts:        make(map[int]struct{}),
@@ -106,19 +92,17 @@ func GetDefaultServerConf() *ServerCommonConf {
 		MaxPortsPerClient: 0,
 		HeartBeatTimeout:  90,
 		UserConnTimeout:   10,
+		Custom404Page:     "",
 	}
 }
 
-func UnmarshalServerConfFromIni(defaultCfg *ServerCommonConf, content string) (cfg *ServerCommonConf, err error) {
-	cfg = defaultCfg
-	if cfg == nil {
-		cfg = GetDefaultServerConf()
-	}
+func UnmarshalServerConfFromIni(content string) (cfg ServerCommonConf, err error) {
+	cfg = GetDefaultServerConf()
 
 	conf, err := ini.Load(strings.NewReader(content))
 	if err != nil {
 		err = fmt.Errorf("parse ini conf file error: %v", err)
-		return nil, err
+		return ServerCommonConf{}, err
 	}
 
 	var (
@@ -244,6 +228,10 @@ func UnmarshalServerConfFromIni(defaultCfg *ServerCommonConf, content string) (c
 		}
 	}
 
+	if tmpStr, ok = conf.Get("common", "disable_log_color"); ok && tmpStr == "true" {
+		cfg.DisableLogColor = true
+	}
+
 	cfg.Token, _ = conf.Get("common", "token")
 
 	if allowPortsStr, ok := conf.Get("common", "allow_ports"); ok {
@@ -285,16 +273,6 @@ func UnmarshalServerConfFromIni(defaultCfg *ServerCommonConf, content string) (c
 		}
 	}
 
-	if tmpStr, ok = conf.Get("common", "authentication_timeout"); ok {
-		v, errRet := strconv.ParseInt(tmpStr, 10, 64)
-		if errRet != nil {
-			err = fmt.Errorf("Parse conf error: authentication_timeout is incorrect")
-			return
-		} else {
-			cfg.AuthTimeout = v
-		}
-	}
-
 	if tmpStr, ok = conf.Get("common", "subdomain_host"); ok {
 		cfg.SubDomainHost = strings.ToLower(strings.TrimSpace(tmpStr))
 	}
@@ -303,6 +281,10 @@ func UnmarshalServerConfFromIni(defaultCfg *ServerCommonConf, content string) (c
 		cfg.TcpMux = false
 	} else {
 		cfg.TcpMux = true
+	}
+
+	if tmpStr, ok = conf.Get("common", "custom_404_page"); ok {
+		cfg.Custom404Page = tmpStr
 	}
 
 	if tmpStr, ok = conf.Get("common", "heartbeat_timeout"); ok {

@@ -12,7 +12,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/fatedier/frp/client"
+	"github.com/fatedier/frp/client/proxy"
 	"github.com/fatedier/frp/server/ports"
 	"github.com/fatedier/frp/tests/consts"
 	"github.com/fatedier/frp/tests/mock"
@@ -22,13 +22,21 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	go mock.StartTcpEchoServer(consts.TEST_TCP_PORT)
-	go mock.StartTcpEchoServer2(consts.TEST_TCP2_PORT)
+	var err error
+	tcpEcho1 := mock.NewEchoServer(consts.TEST_TCP_PORT, 1, "")
+	tcpEcho2 := mock.NewEchoServer(consts.TEST_TCP2_PORT, 2, "")
+
+	if err = tcpEcho1.Start(); err != nil {
+		panic(err)
+	}
+	if err = tcpEcho2.Start(); err != nil {
+		panic(err)
+	}
+
 	go mock.StartUdpEchoServer(consts.TEST_UDP_PORT)
 	go mock.StartUnixDomainServer(consts.TEST_UNIX_DOMAIN_ADDR)
 	go mock.StartHttpServer(consts.TEST_HTTP_PORT)
 
-	var err error
 	p1 := util.NewProcess(consts.FRPS_BIN_PATH, []string{"-c", "./auto_test_frps.ini"})
 	if err = p1.Start(); err != nil {
 		panic(err)
@@ -174,6 +182,21 @@ func TestHttp(t *testing.T) {
 		assert.Equal("true", header.Get("X-Header-Set"))
 	}
 
+	// wildcard_http
+	// test.frp1.com match *.frp1.com
+	code, body, _, err = util.SendHttpMsg("GET", fmt.Sprintf("http://127.0.0.1:%d", consts.TEST_HTTP_FRP_PORT), "test.frp1.com", nil, "")
+	if assert.NoError(err) {
+		assert.Equal(200, code)
+		assert.Equal(consts.TEST_HTTP_NORMAL_STR, body)
+	}
+
+	// new.test.frp1.com also match *.frp1.com
+	code, body, _, err = util.SendHttpMsg("GET", fmt.Sprintf("http://127.0.0.1:%d", consts.TEST_HTTP_FRP_PORT), "new.test.frp1.com", nil, "")
+	if assert.NoError(err) {
+		assert.Equal(200, code)
+		assert.Equal(consts.TEST_HTTP_NORMAL_STR, body)
+	}
+
 	// subhost01
 	code, body, _, err = util.SendHttpMsg("GET", fmt.Sprintf("http://127.0.0.1:%d", consts.TEST_HTTP_FRP_PORT), "test01.sub.com", nil, "")
 	if assert.NoError(err) {
@@ -210,31 +233,31 @@ func TestAllowPorts(t *testing.T) {
 	// Port not allowed
 	status, err := util.GetProxyStatus(consts.ADMIN_ADDR, consts.ADMIN_USER, consts.ADMIN_PWD, consts.ProxyTcpPortNotAllowed)
 	if assert.NoError(err) {
-		assert.Equal(client.ProxyStatusStartErr, status.Status)
+		assert.Equal(proxy.ProxyStatusStartErr, status.Status)
 		assert.True(strings.Contains(status.Err, ports.ErrPortNotAllowed.Error()))
 	}
 
 	status, err = util.GetProxyStatus(consts.ADMIN_ADDR, consts.ADMIN_USER, consts.ADMIN_PWD, consts.ProxyUdpPortNotAllowed)
 	if assert.NoError(err) {
-		assert.Equal(client.ProxyStatusStartErr, status.Status)
+		assert.Equal(proxy.ProxyStatusStartErr, status.Status)
 		assert.True(strings.Contains(status.Err, ports.ErrPortNotAllowed.Error()))
 	}
 
 	status, err = util.GetProxyStatus(consts.ADMIN_ADDR, consts.ADMIN_USER, consts.ADMIN_PWD, consts.ProxyTcpPortUnavailable)
 	if assert.NoError(err) {
-		assert.Equal(client.ProxyStatusStartErr, status.Status)
+		assert.Equal(proxy.ProxyStatusStartErr, status.Status)
 		assert.True(strings.Contains(status.Err, ports.ErrPortUnAvailable.Error()))
 	}
 
 	// Port normal
 	status, err = util.GetProxyStatus(consts.ADMIN_ADDR, consts.ADMIN_USER, consts.ADMIN_PWD, consts.ProxyTcpPortNormal)
 	if assert.NoError(err) {
-		assert.Equal(client.ProxyStatusRunning, status.Status)
+		assert.Equal(proxy.ProxyStatusRunning, status.Status)
 	}
 
 	status, err = util.GetProxyStatus(consts.ADMIN_ADDR, consts.ADMIN_USER, consts.ADMIN_PWD, consts.ProxyUdpPortNormal)
 	if assert.NoError(err) {
-		assert.Equal(client.ProxyStatusRunning, status.Status)
+		assert.Equal(proxy.ProxyStatusRunning, status.Status)
 	}
 }
 
@@ -263,7 +286,7 @@ func TestPluginHttpProxy(t *testing.T) {
 	assert := assert.New(t)
 	status, err := util.GetProxyStatus(consts.ADMIN_ADDR, consts.ADMIN_USER, consts.ADMIN_PWD, consts.ProxyHttpProxy)
 	if assert.NoError(err) {
-		assert.Equal(client.ProxyStatusRunning, status.Status)
+		assert.Equal(proxy.ProxyStatusRunning, status.Status)
 
 		// http proxy
 		addr := status.RemoteAddr
@@ -291,7 +314,7 @@ func TestRangePortsMapping(t *testing.T) {
 		name := fmt.Sprintf("%s_%d", consts.ProxyRangeTcpPrefix, i)
 		status, err := util.GetProxyStatus(consts.ADMIN_ADDR, consts.ADMIN_USER, consts.ADMIN_PWD, name)
 		if assert.NoError(err) {
-			assert.Equal(client.ProxyStatusRunning, status.Status)
+			assert.Equal(proxy.ProxyStatusRunning, status.Status)
 		}
 	}
 }

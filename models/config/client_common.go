@@ -32,11 +32,13 @@ type ClientCommonConf struct {
 	LogWay            string              `json:"log_way"`
 	LogLevel          string              `json:"log_level"`
 	LogMaxDays        int64               `json:"log_max_days"`
+	DisableLogColor   bool                `json:"disable_log_color"`
 	Token             string              `json:"token"`
 	AdminAddr         string              `json:"admin_addr"`
 	AdminPort         int                 `json:"admin_port"`
 	AdminUser         string              `json:"admin_user"`
 	AdminPwd          string              `json:"admin_pwd"`
+	AssetsDir         string              `json:"assets_dir"`
 	PoolCount         int                 `json:"pool_count"`
 	TcpMux            bool                `json:"tcp_mux"`
 	User              string              `json:"user"`
@@ -44,6 +46,7 @@ type ClientCommonConf struct {
 	LoginFailExit     bool                `json:"login_fail_exit"`
 	Start             map[string]struct{} `json:"start"`
 	Protocol          string              `json:"protocol"`
+	TLSEnable         bool                `json:"tls_enable"`
 	HeartBeatInterval int64               `json:"heartbeat_interval"`
 	HeartBeatTimeout  int64               `json:"heartbeat_timeout"`
 }
@@ -57,11 +60,13 @@ func GetDefaultClientConf() *ClientCommonConf {
 		LogWay:            "console",
 		LogLevel:          "info",
 		LogMaxDays:        3,
+		DisableLogColor:   false,
 		Token:             "",
 		AdminAddr:         "127.0.0.1",
 		AdminPort:         0,
 		AdminUser:         "",
 		AdminPwd:          "",
+		AssetsDir:         "",
 		PoolCount:         1,
 		TcpMux:            true,
 		User:              "",
@@ -69,6 +74,7 @@ func GetDefaultClientConf() *ClientCommonConf {
 		LoginFailExit:     true,
 		Start:             make(map[string]struct{}),
 		Protocol:          "tcp",
+		TLSEnable:         false,
 		HeartBeatInterval: 30,
 		HeartBeatTimeout:  90,
 	}
@@ -102,6 +108,10 @@ func UnmarshalClientConfFromIni(defaultCfg *ClientCommonConf, content string) (c
 			return
 		}
 		cfg.ServerPort = int(v)
+	}
+
+	if tmpStr, ok = conf.Get("common", "disable_log_color"); ok && tmpStr == "true" {
+		cfg.DisableLogColor = true
 	}
 
 	if tmpStr, ok = conf.Get("common", "http_proxy"); ok {
@@ -152,6 +162,10 @@ func UnmarshalClientConfFromIni(defaultCfg *ClientCommonConf, content string) (c
 		cfg.AdminPwd = tmpStr
 	}
 
+	if tmpStr, ok = conf.Get("common", "assets_dir"); ok {
+		cfg.AssetsDir = tmpStr
+	}
+
 	if tmpStr, ok = conf.Get("common", "pool_count"); ok {
 		if v, err = strconv.ParseInt(tmpStr, 10, 64); err == nil {
 			cfg.PoolCount = int(v)
@@ -192,6 +206,12 @@ func UnmarshalClientConfFromIni(defaultCfg *ClientCommonConf, content string) (c
 			return
 		}
 		cfg.Protocol = tmpStr
+	}
+
+	if tmpStr, ok = conf.Get("common", "tls_enable"); ok && tmpStr == "true" {
+		cfg.TLSEnable = true
+	} else {
+		cfg.TLSEnable = false
 	}
 
 	if tmpStr, ok = conf.Get("common", "heartbeat_timeout"); ok {
